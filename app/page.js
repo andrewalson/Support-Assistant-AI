@@ -1,9 +1,11 @@
 "use client";
 
 import { Box, Button, Stack, TextField } from "@mui/material";
-import { useState } from "react";
+import { Island_Moments } from "next/font/google";
+import { useState, useRef, useEffect } from "react";
 
 export default function Home() {
+  // State variables
   const [messages, setMessages] = useState([
     {
       role: "assistant",
@@ -12,10 +14,12 @@ export default function Home() {
     },
   ]);
   const [message, setMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   // Handles sending user message to server, receiving streamed response, and updating the interface in real-time
   const sendMessage = async () => {
-    if (!message.trim()) return; // Don't send empty messages
+    if (!message.trim() || isLoading) return; // Don't send messages blank / if loading?
+    setIsLoading(true);
 
     setMessage(""); // Clear the input field
     setMessages((messages) => [
@@ -24,6 +28,7 @@ export default function Home() {
       { role: "assistant", content: "" }, // Add a placeholder for the assistant's response
     ]);
 
+    // Send messsage to server here
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
@@ -64,7 +69,25 @@ export default function Home() {
         },
       ]);
     }
+    setIsLoading(false);
   };
+
+  const handleKeyPress = (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      sendMessage();
+    }
+  };
+
+  const messagesEndRef = useRef(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
   return (
     <Box
@@ -112,6 +135,7 @@ export default function Home() {
               </Box>
             </Box>
           ))}
+          <div ref={messagesEndRef} />
         </Stack>
         <Stack direction={"row"} spacing={2}>
           <TextField
@@ -119,9 +143,15 @@ export default function Home() {
             fullWidth
             value={message}
             onChange={(e) => setMessage(e.target.value)}
+            onKeyPress={handleKeyPress}
+            disabled={isLoading}
           />
-          <Button variant="contained" onClick={sendMessage}>
-            Send
+          <Button
+            variant="contained"
+            onClick={sendMessage}
+            disabled={isLoading}
+          >
+            {isLoading ? "Sending..." : "Send"}
           </Button>
         </Stack>
       </Stack>
