@@ -7,6 +7,7 @@ const systemPrompt =
 
 // POST function to handle incoming requests
 export async function POST(req) {
+  // OpenAI library is designed to automatically look for an environment variable named OPENAI_API_KEY if no key is provided in the constructor.
   const openai = new OpenAI(); // Create a new instance of the OpenAI client
   const data = await req.json(); // Parse the JSON body of the incoming request
 

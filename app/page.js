@@ -1,11 +1,11 @@
 "use client";
 
 import { Box, Button, Stack, TextField } from "@mui/material";
-import { Island_Moments } from "next/font/google";
 import { useState, useRef, useEffect } from "react";
+import { useSession, signIn, signOut } from "next-auth/react";
 
 export default function Home() {
-  // State variables
+  const { data: session } = useSession();
   const [messages, setMessages] = useState([
     {
       role: "assistant",
@@ -16,19 +16,17 @@ export default function Home() {
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  // Handles sending user message to server, receiving streamed response, and updating the interface in real-time
   const sendMessage = async () => {
-    if (!message.trim() || isLoading) return; // Don't send messages blank / if loading?
+    if (!message.trim() || isLoading) return;
     setIsLoading(true);
 
-    setMessage(""); // Clear the input field
+    setMessage("");
     setMessages((messages) => [
       ...messages,
-      { role: "user", content: message }, // Add the user's message to the chat
-      { role: "assistant", content: "" }, // Add a placeholder for the assistant's response
+      { role: "user", content: message },
+      { role: "assistant", content: "" },
     ]);
 
-    // Send messsage to server here
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
@@ -89,6 +87,21 @@ export default function Home() {
     scrollToBottom();
   }, [messages]);
 
+  if (!session) {
+    return (
+      <Box
+        width="100vw"
+        height="100vh"
+        display="flex"
+        flexDirection="column"
+        justifyContent="center"
+        alignItems="center"
+      >
+        <Button variant="contained" onClick={() => signIn('google')}>Sign in with Google</Button>
+      </Box>
+    );
+  }
+
   return (
     <Box
       width="100vw"
@@ -98,6 +111,9 @@ export default function Home() {
       justifyContent="center"
       alignItems="center"
     >
+      <Button variant="outlined" onClick={() => signOut()} style={{ position: 'absolute', top: 10, right: 10 }}>
+        Sign out
+      </Button>
       <Stack
         direction={"column"}
         width="500px"
