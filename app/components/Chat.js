@@ -32,7 +32,7 @@ export default function Chat() {
     {
       role: "assistant",
       content:
-        "Hi! I'm the Headstarter support assistant. How can I help you today?",
+        "Hi, I'm the Headstarter AI Support Assistant. How can I help you today?",
     },
   ]);
   const [message, setMessage] = useState("");
