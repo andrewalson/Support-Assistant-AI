@@ -3,6 +3,7 @@
 import { Box, Button, Stack, TextField } from "@mui/material";
 import { useState, useRef, useEffect } from "react";
 import { useSession, signIn, signOut } from "next-auth/react";
+import Hero from "./components/Hero";
 
 export default function Home() {
   const { data: session } = useSession();
@@ -89,7 +90,7 @@ export default function Home() {
 
   if (!session) {
     return (
-      <Box
+      /*<Box
         width="100vw"
         height="100vh"
         display="flex"
@@ -99,6 +100,9 @@ export default function Home() {
       >
         <Button variant="contained" onClick={() => signIn('google')}>Sign in with Google</Button>
       </Box>
+    );
+    */
+      <Hero />
     );
   }
 
