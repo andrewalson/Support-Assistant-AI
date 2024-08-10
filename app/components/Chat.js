@@ -1,31 +1,33 @@
-// components/Chat.js
-
 import { Box, Button, Stack, TextField, Avatar, createTheme, ThemeProvider, IconButton } from "@mui/material";
 import { useState, useRef, useEffect } from "react";
 import { useSession, signOut } from "next-auth/react";
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import ReplayIcon from '@mui/icons-material/Replay';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import ReactMarkdown from "react-markdown";
+import remarkGfm from 'remark-gfm';
 
-// Step 1: Define the custom MUI theme using the provided color palette
 const customTheme = createTheme({
   palette: {
-    primary: { main: '#F5631A' },  // Orange
+    primary: { main: '#F5631A' },  
     secondary: { main: '#FC2E20' },  
-    error: { main: '#D41E00' },  // Red
+    error: { main: '#D41E00' },  
     background: {
-      default: '#0A0A0A',  // Base color
-      paper: '#FFF3E0'  // A lighter shade of the theme for paper elements (like messages)
+      default: '#0A0A0A',  
+      paper: '#FFF3E0'  
     },
     text: {
-      primary: '#ffffff',  // Dark text color for contrast
-      secondary: '#000000',  // Black text for secondary elements
+      primary: '#ffffff',  
+      secondary: '#000000',  
     },
   },
 });
 
 export default function Chat() {
   const { data: session } = useSession();
+  const [markdownContent, setMarkdownContent] = useState("# Hello, Markdown!");
+
+  // chat system prompt
   const [messages, setMessages] = useState([
     {
       role: "assistant",
@@ -116,8 +118,6 @@ export default function Chat() {
     return "/favicon.ico"; // Path to the favicon.ico inside the app folder for the assistant's avatar
   };
 
-  // Step 2: Define the action handlers for the buttons
-
   // Handle copying the message content to the clipboard
   const handleCopy = (content) => {
     navigator.clipboard.writeText(content);
@@ -180,6 +180,22 @@ export default function Chat() {
                 backgroundColor: "#888",
                 borderRadius: "10px",
               },
+              // Table styles rendering for the chat messages
+              table: {
+                width: '100%',
+                borderCollapse: 'collapse',
+                marginBottom: '1rem',
+                marginTop: '1rem',
+              },
+              th: {
+                border: '1px solid #ddd',
+                padding: '0.5rem',
+                backgroundColor: '#808080',
+              },
+              td: {
+                border: '1px solid #ddd',
+                padding: '0.5rem',
+              },
             }}
           >
             {messages.map((message, index) => (
@@ -208,11 +224,13 @@ export default function Chat() {
                     maxWidth="75%"
                     wordWrap="break-word"
                     sx={{
-                      borderRadius: 8, // Slight rounding for the message bubbles
+                      borderRadius: 8, 
                       boxShadow: 1, // Slight shadow for some depth
                     }}
                   >
-                    {message.content}
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {message.content}
+                    </ReactMarkdown>
                   </Box>
                 </Box>
 
