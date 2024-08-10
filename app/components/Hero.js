@@ -27,9 +27,12 @@ export default function Hero() {
                 justifyContent="center"
                 alignItems="center"
                 sx={{
-                    backgroundColor: '#0A0A0A',
-                    backgroundImage: `radial-gradient(#303030 1px, transparent 1px)`,
-                    backgroundSize: '20px 20px',
+                    backgroundColor: '#0A0A0A', // Base color
+                    backgroundImage: `
+                        radial-gradient(#303030 1px, transparent 1px), 
+                        linear-gradient(180deg, rgba(10, 10, 10, 0.8) 0%, rgba(48, 48, 48, 0.8) 100%)
+                    `,
+                    backgroundSize: '20px 20px, 100% 100%', // SVG dots first, then gradient
                 }}
             >
                 <Typography 
