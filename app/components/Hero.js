@@ -48,7 +48,7 @@ export default function Hero() {
                         fontSize: { xs: '2.5rem', sm: '3.5rem', md: '6rem' },
                     }}
                 >
-                    AI customer support
+                    AI Customer Support
                 </Typography>
                 <Typography 
                     variant="h5" 

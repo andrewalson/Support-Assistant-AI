@@ -1,6 +1,8 @@
 import { Box, Button, Stack, TextField, Avatar, createTheme, ThemeProvider, IconButton } from "@mui/material";
 import { useState, useRef, useEffect } from "react";
 import { useSession, signOut } from "next-auth/react";
+import { db } from '../firebase/firebase_api';
+import { collection, query, where, orderBy, getDocs } from "firebase/firestore";
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import ReplayIcon from '@mui/icons-material/Replay';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
@@ -9,41 +11,76 @@ import remarkGfm from 'remark-gfm';
 
 const customTheme = createTheme({
   palette: {
-    primary: { main: '#F5631A' },  
-    secondary: { main: '#FC2E20' },  
-    error: { main: '#D41E00' },  
+    primary: { main: '#F5631A' },
+    secondary: { main: '#FC2E20' },
+    error: { main: '#D41E00' },
     background: {
-      default: '#0A0A0A',  
-      paper: '#FFF3E0'  
+      default: '#0A0A0A',
+      paper: '#FFF3E0'
     },
     text: {
-      primary: '#ffffff',  
-      secondary: '#000000',  
+      primary: '#ffffff',
+      secondary: '#000000',
     },
   },
 });
 
 export default function Chat() {
   const { data: session } = useSession();
-  const [markdownContent, setMarkdownContent] = useState("# Hello, Markdown!");
-
-  // chat system prompt
   const [messages, setMessages] = useState([
     {
       role: "assistant",
-      content:
-        "Hi! I'm the Headstarter support assistant. How can I help you today?",
-    },
+      content: "Hi! I'm the Headstarter support assistant. How can I help you today?",
+    }
   ]);
+  const [markdownContent, setMarkdownContent] = useState("# Hello, Markdown!"); // Markdown content state
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const messagesEndRef = useRef(null);
 
-  // Function to send a message
+  const getAvatarSrc = () => {
+    return "/favicon.ico"; // Path to the bot.ico inside the app folder for the assistant's avatar
+  };
+
+  const handleCopy = (content) => {
+    navigator.clipboard.writeText(content);
+    alert("Message copied to clipboard!");
+  };
+
+  const handleRegenerate = async () => {
+    const lastUserMessage = messages.reverse().find(msg => msg.role === 'user')?.content;
+    if (lastUserMessage) {
+      sendMessage(lastUserMessage);
+    }
+  };
+  // Function to fetch chat history from Firestore
+  useEffect(() => {
+    if (session) {
+      fetchMessages();
+    }
+  }, [session]);
+
+  const fetchMessages = async () => {
+    if (!session) return;
+    const messagesRef = collection(db, "messages");
+    const q = query(messagesRef, where("userId", "==", session.user.id), orderBy("createdAt"));
+    const querySnapshot = await getDocs(q);
+    const loadedMessages = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    setMessages(previousMessages => [
+      ...previousMessages,
+      ...loadedMessages
+    ]);
+  };
+
+  // Function to handle sending messages and streaming the response
   const sendMessage = async (userMessage) => {
     if (!userMessage.trim() || isLoading) return;
     setIsLoading(true);
 
-    setMessages((messages) => [
+    setMessages(messages => [
       ...messages,
       { role: "user", content: userMessage },
       { role: "assistant", content: "" },
@@ -55,7 +92,7 @@ export default function Chat() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify([...messages, { role: "user", content: userMessage }]),
+        body: JSON.stringify({ role: "user", content: userMessage }),
       });
 
       if (!response.ok) {
@@ -63,44 +100,42 @@ export default function Chat() {
       }
 
       const reader = response.body.getReader();
-      const decoder = new TextDecoder();
+      const decoder = new TextDecoder("utf-8");
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         const text = decoder.decode(value, { stream: true });
-        setMessages((messages) => {
-          let lastMessage = messages[messages.length - 1];
-          let otherMessages = messages.slice(0, messages.length - 1);
+        setMessages((currentMessages) => {
+          const lastMessage = currentMessages[currentMessages.length - 1];
+          const updatedLastMessage = { ...lastMessage, content: lastMessage.content + text };
           return [
-            ...otherMessages,
-            { ...lastMessage, content: lastMessage.content + text },
+            ...currentMessages.slice(0, currentMessages.length - 1),
+            updatedLastMessage
           ];
         });
       }
     } catch (error) {
       console.error("Error:", error);
-      setMessages((messages) => [
-        ...messages,
+      setMessages(currentMessages => [
+        ...currentMessages,
         {
           role: "assistant",
-          content:
-            "I'm sorry, but I encountered an error. Please try again later.",
+          content: "I'm sorry, but I encountered an error. Please try again later.",
         },
       ]);
     }
+
     setIsLoading(false);
+    setMessage("");  // Clear the message input after sending
   };
 
   const handleKeyPress = (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       sendMessage(message);
-      setMessage("");  // Clear the message input after sending
     }
   };
-
-  const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -113,24 +148,6 @@ export default function Chat() {
   if (!session) {
     return null;
   }
-
-  const getAvatarSrc = () => {
-    return "/favicon.ico"; // Path to the favicon.ico inside the app folder for the assistant's avatar
-  };
-
-  // Handle copying the message content to the clipboard
-  const handleCopy = (content) => {
-    navigator.clipboard.writeText(content);
-    alert("Message copied to clipboard!");
-  };
-
-  // Handle regenerating the bot's response using the last user input
-  const handleRegenerate = async () => {
-    const lastUserMessage = messages.reverse().find(msg => msg.role === 'user')?.content;
-    if (lastUserMessage) {
-      sendMessage(lastUserMessage);
-    }
-  };
 
   return (
     <ThemeProvider theme={customTheme}>
@@ -151,6 +168,14 @@ export default function Chat() {
             borderColor: "text.secondary" }}>
           Sign out
         </Button>
+        <Button variant="contained" onClick={fetchMessages} style={{ 
+            position: 'absolute', 
+            top: 60, 
+            right: 10, 
+            color: "text.primary", 
+            backgroundColor: "primary.main" }}>
+          CHAT HISTORY
+        </Button>
         <Stack
           direction={"column"}
           width="80vw"
@@ -161,79 +186,24 @@ export default function Chat() {
           bgcolor="background.paper"
           borderRadius={4}
         >
-          <Stack
-            direction={"column"}
-            spacing={2}
-            flexGrow={1}
-            overflow="auto"
-            maxHeight="100%"
-            p={2}
-            sx={{
-              scrollbarWidth: "thin",
-              "&::-webkit-scrollbar": {
-                width: "0.4em",
-              },
-              "&::-webkit-scrollbar-track": {
-                background: "#2e2e2e",
-              },
-              "&::-webkit-scrollbar-thumb": {
-                backgroundColor: "#888",
-                borderRadius: "10px",
-              },
-              // Table styles rendering for the chat messages
-              table: {
-                width: '100%',
-                borderCollapse: 'collapse',
-                marginBottom: '1rem',
-                marginTop: '1rem',
-              },
-              th: {
-                border: '1px solid #ddd',
-                padding: '0.5rem',
-                backgroundColor: '#808080',
-              },
-              td: {
-                border: '1px solid #ddd',
-                padding: '0.5rem',
-              },
-            }}
-          >
-            {messages.map((message, index) => (
-              <Box key={index} display="flex" flexDirection="column">
+          {messages.map((message, index) => (
+            <Box key={index} display="flex" flexDirection="column">
+              <Box
+                display="flex"
+                justifyContent={message.role === "assistant" ? "flex-start" : "flex-end"}
+                sx={{ p: 1 }}
+              >
+                <Avatar src={getAvatarSrc()} sx={{ mr: 2, bgcolor: message.role === "assistant" ? "primary.main" : "secondary.main" }} />
                 <Box
-                  display="flex"
-                  justifyContent={
-                    message.role === "assistant" ? "flex-start" : "flex-end"
-                  }
+                  bgcolor={message.role === "assistant" ? "primary.main" : "secondary.main"}
+                  color="text.primary"
+                  p={2}
+                  sx={{ borderRadius: 2, maxWidth: "75%", wordWrap: "break-word" }}
                 >
-                  {message.role === "assistant" && (
-                    <Avatar 
-                      src={getAvatarSrc()} 
-                      alt="Assistant" 
-                      sx={{ width: 40, height: 40, mr: 2 }}
-                    />
-                  )}
-                  <Box
-                    bgcolor={
-                      message.role === "assistant"
-                        ? "primary.main"
-                        : "secondary.main"
-                    }
-                    color="text.primary"
-                    p={2}
-                    maxWidth="75%"
-                    wordWrap="break-word"
-                    sx={{
-                      borderRadius: 8, 
-                      boxShadow: 1, // Slight shadow for some depth
-                    }}
-                  >
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {message.content}
-                    </ReactMarkdown>
-                  </Box>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {message.content}
+                  </ReactMarkdown>
                 </Box>
-
                 {message.role === "assistant" && (
                   <Stack direction="row" spacing={1} justifyContent="flex-start" mt={1}>
                     <IconButton onClick={() => handleCopy(message.content)} size="small">
@@ -245,9 +215,9 @@ export default function Chat() {
                   </Stack>
                 )}
               </Box>
-            ))}
-            <div ref={messagesEndRef} />
-          </Stack>
+            </Box>
+          ))}
+          <div ref={messagesEndRef} />
           <Stack direction={"row"} spacing={2}>
             <TextField
               label="Type your message..."
@@ -257,25 +227,14 @@ export default function Chat() {
               onChange={(e) => setMessage(e.target.value)}
               onKeyPress={handleKeyPress}
               disabled={isLoading}
-              InputLabelProps={{
-                style: { color: customTheme.palette.text.secondary },
-              }}
-              InputProps={{
-                style: { color: customTheme.palette.text.primary },
-              }}
-              sx={{
-                input: {
-                  color: customTheme.palette.text.secondary,  // Set input text color to black
-                },
-              }}
             />
             <Button
               variant="contained"
               onClick={() => sendMessage(message)}
               disabled={isLoading}
-              sx={{ bgcolor: "primary.main", color: "text.primary", borderRadius: 8 }}
+              sx={{ bgcolor: "primary.main", color: "text.primary" }}
             >
-              {isLoading ? "Sending..." : <ArrowUpwardIcon color="white"/>}
+              {isLoading ? "Sending..." : <ArrowUpwardIcon />}
             </Button>
           </Stack>
         </Stack>
