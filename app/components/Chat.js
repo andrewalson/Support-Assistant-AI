@@ -2,7 +2,7 @@ import { Box, Button, Stack, TextField, Avatar, createTheme, ThemeProvider, Icon
 import { useState, useRef, useEffect } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { db } from '../firebase/firebase_api';
-import { collection, query, where, orderBy, getDocs } from "firebase/firestore";
+import { collection, query, where, orderBy, getDocs, addDoc, serverTimestamp } from "firebase/firestore";
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import ReplayIcon from '@mui/icons-material/Replay';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
@@ -53,6 +53,24 @@ export default function Chat() {
       sendMessage(lastUserMessage);
     }
   };
+
+  // Save message to Firestore function
+  const saveMessageToFirestore = async (message) => {
+    if (!session) return;
+    
+    try {
+      const messagesRef = collection(db, "messages");
+      await addDoc(messagesRef, {
+        userId: session.user.id,
+        role: message.role,
+        content: message.content,
+        createdAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error("Error saving message to Firestore:", error);
+    }
+  };
+
   // Function to fetch chat history from Firestore
   useEffect(() => {
     if (session) {
@@ -62,72 +80,71 @@ export default function Chat() {
 
   const fetchMessages = async () => {
     if (!session) return;
+    setIsLoading(true);
     const messagesRef = collection(db, "messages");
-    const q = query(messagesRef, where("userId", "==", session.user.id), orderBy("createdAt"));
-    const querySnapshot = await getDocs(q);
-    const loadedMessages = querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-    setMessages(previousMessages => [
-      ...previousMessages,
-      ...loadedMessages
-    ]);
+    const q = query(
+      messagesRef,
+      where("userId", "==", session.user.id),
+      orderBy("createdAt", "asc")
+    );
+    
+    try {
+      const querySnapshot = await getDocs(q);
+      const loadedMessages = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setMessages(prevMessages => [...prevMessages, ...loadedMessages]);
+    } catch (error) {
+      console.error("Error fetching messages:", error);
+    }
+    setIsLoading(false);
   };
 
   // Function to handle sending messages and streaming the response
-  const sendMessage = async (userMessage) => {
-    if (!userMessage.trim() || isLoading) return;
+  const sendMessage = async (content) => {
+    if (!content.trim()) return;
+  
+    const userMessage = { role: "user", content };
+    setMessages((prevMessages) => [...prevMessages, userMessage]);
+    
+    // Save user message to Firestore
+    await saveMessageToFirestore(userMessage);
+  
     setIsLoading(true);
-
-    setMessages(messages => [
-      ...messages,
-      { role: "user", content: userMessage },
-      { role: "assistant", content: "" },
-    ]);
-
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ role: "user", content: userMessage }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify([...messages, userMessage]),
       });
-
-      if (!response.ok) {
-        throw new Error("Network response was not ok");
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder("utf-8");
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const text = decoder.decode(value, { stream: true });
-        setMessages((currentMessages) => {
-          const lastMessage = currentMessages[currentMessages.length - 1];
-          const updatedLastMessage = { ...lastMessage, content: lastMessage.content + text };
-          return [
-            ...currentMessages.slice(0, currentMessages.length - 1),
-            updatedLastMessage
-          ];
-        });
+  
+      if (response.ok) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let aiResponse = "";
+  
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          aiResponse += decoder.decode(value);
+          setMessages((prevMessages) => [
+            ...prevMessages.slice(0, -1),
+            userMessage,
+            { role: "assistant", content: aiResponse },
+          ]);
+        }
+  
+        // Save AI response to Firestore
+        await saveMessageToFirestore({ role: "assistant", content: aiResponse });
+      } else {
+        console.error("Error in API response");
       }
     } catch (error) {
-      console.error("Error:", error);
-      setMessages(currentMessages => [
-        ...currentMessages,
-        {
-          role: "assistant",
-          content: "I'm sorry, but I encountered an error. Please try again later.",
-        },
-      ]);
+      console.error("Error sending message:", error);
+    } finally {
+      setIsLoading(false);
     }
-
-    setIsLoading(false);
-    setMessage("");  // Clear the message input after sending
   };
 
   const handleKeyPress = (event) => {
