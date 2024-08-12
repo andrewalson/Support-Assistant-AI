@@ -18,7 +18,7 @@
 ## Getting Started
 
 - 'git clone https://github.com/andrewalson/Support-Assistant-AI.git'
-- 'cd inventory-management-app'
+- 'cd support-assistant-ai'
 - 'npm install'
 - 'npm run dev'
 - [http://localhost:3000](http://localhost:3000)
